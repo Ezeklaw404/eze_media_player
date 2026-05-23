@@ -13,3 +13,9 @@ path = folder_to_play = os.path.normpath(hunter_url)
 subprocess.Popen([vlc, path])
 
 # player = vlc.MediaPlayer(f"{hunter_url}/{file_name}")
+
+
+
+# ui for seeing folders files, selectable, next btn. drag and drop to reorder
+
+# mark as watched to unselect. local stora
