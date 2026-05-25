@@ -1,21 +1,11 @@
 import os
+import json
 import subprocess
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import filedialog
 
-
-# vlc = r"C:/Program Files (x86)/VideoLAN/VLC/vlc.exe"
-# desktop
-vlc = r"C:\Program Files\VideoLAN\VLC\vlc.exe"
-
-CONFIG_FILE = "config.txt"
-
-
-
-# ui for seeing folders files, selectable, next btn. drag and drop to reorder
-
-# mark as watched to unselect. local stora
+CONFIG_FILE = "config.json"
 
 class FileObject:
     def __init__(self, name, path):
@@ -25,65 +15,103 @@ class FileObject:
         self.isFolder = self.path.is_dir()
 
 
-
-# Set up clean dark mode styling
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
-
-
 
 class MediaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.title("Media Queue Launcher")
+        self.title("Eze Media Player")
         self.geometry("600x500")
         
         # --- Configurable Paths ---
-        self.vlc_path = Path(vlc) # Adjust if 64-bit
-        self.base_url = self.load_saved_path()
+        self.config_data = self.load_config()
         
-        # --- Data State ---
+        self.base_url = Path(self.config_data["base_folder_path"]) if self.config_data["base_folder_path"] else None
+        
+        config_path_str = self.config_data.get("vlc_path", "")
+        self.vlc_path = Path(config_path_str) if config_path_str else None
+        
+        if not self.vlc_path or not self.vlc_path.is_file():
+            chosen_vlc = filedialog.askopenfilename(
+                title="Locate vlc.exe",
+                filetypes=[("VLC Executable", "vlc.exe"), ("Executable Files", "*.exe")]
+            )
+            if chosen_vlc:
+                self.vlc_path = Path(chosen_vlc)
+                self.config_data["vlc_path"] = str(self.vlc_path)
+                self.save_config()
+            else:
+                self.vlc_path = Path("")
+
+        self.current_dir = self.base_url
+        self.history = []                     
         self.media_items = []
         
         # --- Layout Components ---
         self.setup_ui()
-
 
         if self.base_url:
             self.load_media_items()
         
         
 
-    def load_saved_path(self):
-        """Reads the saved path string from config.txt if it exists."""
+    def load_config(self):
+        """Loads app configurations and history tracking list from JSON."""
+        default_structure = {
+            "vlc_path": "",
+            "base_folder_path": "",
+            "watched_paths": []
+        }
+        
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                saved_path = f.read().strip()
-                if saved_path and os.path.exists(saved_path):
-                    return Path(saved_path)
-        return None
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    
+                    for key, val in default_structure.items():
+                        if key not in data:
+                            data[key] = val
+                    return data
+            except Exception:
+                return default_structure
+        return default_structure
 
-    def save_path_to_txt(self, path_str):
-        """Overwrites config.txt with the newly chosen file location."""
+    def save_config(self):
+
+        save_data = {
+            "vlc_path": str(self.vlc_path),
+            "base_folder_path": str(self.base_url) if self.base_url else "",
+            "watched_paths": self.config_data["watched_paths"]
+        }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            f.write(path_str)
+            json.dump(save_data, f, indent=4)
 
+    def is_path_watched(self, item_path):
+
+        item_path_str = str(Path(item_path).resolve())
+        
+        for watched_str in self.config_data["watched_paths"]:
+            w_path = str(Path(watched_str).resolve())
+
+            if item_path_str == w_path or item_path_str.startswith(w_path + os.sep):
+                return True
+        return False
+    
     def choose_folder(self):
-        """Opens a native Windows browser window to pick a media directory."""
+
         chosen_dir = filedialog.askdirectory(title="Select Media Target Folder")
         if chosen_dir:
             self.base_url = Path(chosen_dir)
-            self.save_path_to_txt(chosen_dir)
-            
-            # Update path label in UI and refresh contents
-            self.path_label.configure(text=f"Folder: {self.base_url.name}")
+            self.current_dir = self.base_url
+            self.history.clear()
+            self.save_config()
+            self.update_ui_state()
             self.load_media_items()
 
 
     def load_media_items(self):
-        """Scans the designated directory and renders items inside the GUI."""
-        # Clear out any old list items and visual rows first
         self.media_items.clear()
         for child in self.scroll_frame.winfo_children():
             child.destroy()
@@ -91,51 +119,146 @@ class MediaApp(ctk.CTk):
         if not self.base_url or not self.base_url.exists():
             return
             
-        for item in self.base_url.iterdir():
-            if not item.name.startswith('.'):
-                file_obj = FileObject(name=item.name, path=item)
-                self.media_items.append(file_obj)
-                self.create_item_row(file_obj)
+        try:
+            for item in self.current_dir.iterdir():
+                if not item.name.startswith('.'):
+                    watched_status = self.is_path_watched(item)
+                    file_obj = FileObject(name=item.name, path=item)
+                    file_obj.watched = watched_status
+                    self.media_items.append(file_obj)
+                    self.create_item_row(file_obj)
+        except PermissionError:
+            print(f"Permission denied accessing: {self.current_dir}")
+            self.go_back()
 
     def setup_ui(self):
-        # 1. Top Settings Bar (Picker & Feedback)
+        # Top Settings Bar
         top_bar = ctk.CTkFrame(self)
         top_bar.pack(fill="x", padx=20, pady=15)
         
-        folder_display_text = f"Folder: {self.base_url.name}" if self.base_url else "No Folder Selected"
-        self.path_label = ctk.CTkLabel(top_bar, text=folder_display_text, font=ctk.CTkFont(weight="bold"))
-        self.path_label.pack(side="left", padx=15, pady=10)
-        
-        browse_btn = ctk.CTkButton(top_bar, text="Change Folder", width=110, command=self.choose_folder)
-        browse_btn.pack(side="right", padx=15, pady=10)
+        self.back_btn = ctk.CTkButton(top_bar, text="⬅", width=15, command=self.go_back, state="disabled")
+        self.back_btn.pack(side="left", padx=5, pady=10)
 
-        # 2. Scrollable Frame for Media Items
+        browse_btn = ctk.CTkButton(top_bar, text="📁", width=20, command=self.choose_folder)
+        browse_btn.pack(side="left", padx=5, pady=10)
+
+        folder_display_text = f"../{self.base_url.name}" if self.base_url else "No Folder Selected"
+        self.path_label = ctk.CTkLabel(top_bar, text=folder_display_text, font=ctk.CTkFont(weight="bold"))
+        self.path_label.pack(side="left", padx=10, pady=10)
+
+        # Scrollable Frame for Media Items
         self.scroll_frame = ctk.CTkScrollableFrame(self, width=560, height=380)
         self.scroll_frame.pack(pady=5, padx=20, fill="both", expand=True)
+
+
+    def update_ui_state(self):
+        if self.current_dir and self.base_url:
+            if self.current_dir == self.base_url:
+                self.path_label.configure(text=f"../{self.base_url.name}")
+            else:
+                relative_path = self.current_dir.relative_to(self.base_url).as_posix()
+                full_display_path = f"../{self.base_url.name}/{relative_path}"
+                self.path_label.configure(text=full_display_path)
+        
+        if self.history:
+            self.back_btn.configure(state="normal")
+        else:
+            self.back_btn.configure(state="disabled")
 
     def create_item_row(self, item):
         row_frame = ctk.CTkFrame(self.scroll_frame)
         row_frame.pack(fill="x", pady=5, padx=5)
         
         prefix = "📁 " if item.isFolder else "🎬 "
-        display_name = item.name if len(item.name) < 55 else f"{item.name[:52]}..."
+        display_name = f"{prefix} {item.name}"
         
-        name_label = ctk.CTkLabel(row_frame, text=f"{prefix} {display_name}", anchor="w")
-        name_label.pack(side="left", padx=15, pady=10)
-        
-
         play_btn = ctk.CTkButton(row_frame, text="▷", width=15, command=lambda obj=item: self.launch_media(obj))
-        play_btn.pack(side="right", padx=15, pady=10)
+        play_btn.pack(side="left", padx=5, pady=0)
+
+        name_label = ctk.CTkLabel(row_frame, text=display_name, anchor="w", wraplength=450)
+        name_label.pack(side="left", padx=5, pady=0, fill="x", expand=True)
+        
+        if item.watched:
+            name_label.configure(text_color="#808080")
+            
+        if item.isFolder:
+            row_frame.bind("<Double-1>", lambda event, obj=item: self.navigate_into(obj))
+            name_label.bind("<Double-1>", lambda event, obj=item: self.navigate_into(obj))
+            
+        row_frame.bind("<Button-3>", lambda event, lbl=name_label, obj=item: self.mark_as_watched(lbl, obj))
+        name_label.bind("<Button-3>", lambda event, lbl=name_label, obj=item: self.mark_as_watched(lbl, obj))
+
+        row_frame.configure(cursor="hand2")
+        name_label.configure(cursor="hand2")
+
+    def mark_as_watched(self, label, media_item):
+        path_str = str(media_item.path.resolve())
+        
+        if path_str in self.config_data["watched_paths"]:
+            self.config_data["watched_paths"].remove(path_str)
+            media_item.watched = False
+            label.configure(text_color="#FFFFFF")
+        else:
+            self.config_data["watched_paths"].append(path_str)
+            media_item.watched = True
+            label.configure(text_color="#808080")
+            
+        self.save_config()
+            
+        if media_item.isFolder:
+            self.load_media_items()
+
+    def navigate_into(self, folder_item):
+        self.history.append(self.current_dir) 
+        self.current_dir = folder_item.path    
+        self.update_ui_state()
+        self.load_media_items()
+
+    def go_back(self):
+        if self.history:
+            self.current_dir = self.history.pop() 
+            self.update_ui_state()
+            self.load_media_items()
 
     def launch_media(self, media_item):
-        """Triggers VLC to open the selected specific file or folder path."""
-        if not self.vlc_path.exists():
-            print("VLC installation not found!")
-            return
+        if not self.vlc_path or not self.vlc_path.is_file():
+            chosen_vlc = filedialog.askopenfilename(
+                title="Locate vlc.exe",
+                filetypes=[("VLC Executable", "vlc.exe"), ("Executable Files", "*.exe")]
+            )
+            if chosen_vlc:
+                self.vlc_path = Path(chosen_vlc)
+                self.config_data["vlc_path"] = str(self.vlc_path)
+                self.save_config()
+            else:
+                return
             
-        print(f"Opening: {media_item.name}")
-        subprocess.Popen([str(self.vlc_path), "--playlist-autostart", str(media_item.path)])
+        cmd = [str(self.vlc_path), "--playlist-autostart"]
+        
+        if media_item.isFolder:
+            unwatched_files = []
+            try:
+                for file_path in media_item.path.rglob("*"):
+                    if file_path.is_file() and not file_path.name.startswith('.'):
+                        if not self.is_path_watched(file_path):
+                            unwatched_files.append(str(file_path))
+            except Exception:
+                return
+                
+            if not unwatched_files:
+                return
+                
+            cmd.extend(unwatched_files)
+        else:
+            cmd.append(str(media_item.path))
+            
+        subprocess.Popen(cmd)
 
 if __name__ == "__main__":
     app = MediaApp()
     app.mainloop()
+
+
+
+# -------------future notes-------------
+# when marking a folder as watched, add each item individually, and not just the folder path
