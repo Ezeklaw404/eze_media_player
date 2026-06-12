@@ -25,6 +25,12 @@ A clean, dark-mode desktop media explorer built with Python and CustomTkinter. I
 
 ---
 
+## Download Link - Executable
+
+* [GitHub Releases](https://github.com/Ezeklaw404/eze_media_player/releases)
+
+---
+
 ## Configuration & First-Time Setup
 
 To ensure the application initializes immediately without warning screens or errors, the local \`config.json\` requires two paths and an interface password to be configured:
