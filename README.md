@@ -1,4 +1,4 @@
-# Eze Media Player (Media Queue Launcher)
+# Eze Media Player
 
 A clean, dark-mode desktop media explorer built with Python and CustomTkinter. It allows you to navigate through your media library directories, track your watched history persistently, and launch unwatched content directly into VLC.
 
