@@ -136,11 +136,11 @@ class MediaApp(ctk.CTk):
         top_bar = ctk.CTkFrame(self)
         top_bar.pack(fill="x", padx=20, pady=15)
         
-        self.back_btn = ctk.CTkButton(top_bar, text="⬅", width=15, command=self.go_back, state="disabled")
+        self.back_btn = ctk.CTkButton(top_bar, text="⬅", width=35, command=self.go_back, state="disabled")
         self.back_btn.pack(side="left", padx=5, pady=10)
 
-        browse_btn = ctk.CTkButton(top_bar, text="📁", width=20, command=self.choose_folder)
-        browse_btn.pack(side="left", padx=5, pady=10)
+        self.browse_btn = ctk.CTkButton(top_bar, text="📁", width=35, command=self.choose_folder)
+        self.browse_btn.pack(side="left", padx=5, pady=10)
 
         folder_display_text = f"../{self.base_url.name}" if self.base_url else "No Folder Selected"
         self.path_label = ctk.CTkLabel(top_bar, text=folder_display_text, font=ctk.CTkFont(weight="bold"))
@@ -164,6 +164,7 @@ class MediaApp(ctk.CTk):
             self.back_btn.configure(state="normal")
         else:
             self.back_btn.configure(state="disabled")
+        self.browse_btn.configure(state="normal")
 
     def create_item_row(self, item):
         row_frame = ctk.CTkFrame(self.scroll_frame)
@@ -208,7 +209,15 @@ class MediaApp(ctk.CTk):
         if media_item.isFolder:
             self.load_media_items()
 
+    def show_loading(self, message):
+        """Displays a clean status string and blocks button actions during computations."""
+        self.back_btn.configure(state="disabled")
+        self.browse_btn.configure(state="disabled")
+        self.path_label.configure(text=f"⏳ {message}...")
+        self.update_idletasks()
+
     def navigate_into(self, folder_item):
+        self.show_loading("Loading Directory")
         self.history.append(self.current_dir) 
         self.current_dir = folder_item.path    
         self.update_ui_state()
@@ -216,6 +225,7 @@ class MediaApp(ctk.CTk):
 
     def go_back(self):
         if self.history:
+            self.show_loading("Loading Directory")
             self.current_dir = self.history.pop() 
             self.update_ui_state()
             self.load_media_items()
@@ -236,6 +246,7 @@ class MediaApp(ctk.CTk):
         cmd = [str(self.vlc_path), "--playlist-autostart"]
         
         if media_item.isFolder:
+            self.show_loading("Opening playlist")
             unwatched_files = []
             try:
                 for file_path in media_item.path.rglob("*"):
@@ -243,22 +254,25 @@ class MediaApp(ctk.CTk):
                         if not self.is_path_watched(file_path):
                             unwatched_files.append(str(file_path))
             except Exception:
+                self.update_ui_state()
                 return
                 
             if not unwatched_files:
+                self.update_ui_state()
                 return
                 
             cmd.extend(unwatched_files)
         else:
+            self.show_loading("Opening video")
             cmd.append(str(media_item.path))
             
         subprocess.Popen(cmd)
+        # Keeps status on-screen for 1.5 seconds so you know it successfully launched
+        self.after(1500, self.update_ui_state)
 
 if __name__ == "__main__":
     app = MediaApp()
     app.mainloop()
-
-
 
 # -------------future notes-------------
 # when marking a folder as watched, add each item individually, and not just the folder path
