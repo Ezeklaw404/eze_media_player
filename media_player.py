@@ -301,8 +301,8 @@ class MediaApp(ctk.CTk):
                         # VLC returns filename, or occasionally absolute URI/filepath parameters
                         filename = meta.get("filename") or meta.get("filename_vlc")
                         
-                        # If a video is playing and is over 90% complete
-                        if filename and position > 0.9:
+                        # If a video is playing and is over 85% complete
+                        if filename and position > 0.85:
                             self.auto_mark_by_name(filename)
                 except Exception:
                     pass # VLC status server is closed or not responding right now
