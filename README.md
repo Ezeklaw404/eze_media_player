@@ -11,7 +11,7 @@ A clean, dark-mode desktop media explorer built with Python and CustomTkinter. I
 * **Persistent History:** Your targeted root directory, VLC path, and watch history save automatically to a local \`config.json\` file.
 * **Smart Folder Queuing:** Clicking play (\`▷\`) on a folder scans deeply and automatically streams **only your unwatched files** straight into VLC.
 * **Auto-Wrap Layout:** File and folder names intelligently fill up the application layout space without ugly truncation.
-* **Automated Playback Tracking:** Connects directly to VLC's local host interface to automatically mark files as watched once playback crosses 90% completion.
+* **Automated Playback Tracking:** Connects directly to VLC's local host interface to automatically mark files as watched once playback crosses 85% completion.
 
 ---
 
